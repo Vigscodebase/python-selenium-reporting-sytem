@@ -1,0 +1,8 @@
+[properties]
+SERVER:smtp.gmail.com
+PORT:587
+USERNAME:reports@clickmatix.com.au
+PASSWORD:giydrsvfxswusjoy
+SENDER_NAME:Clickmatix Report
+BCC:reports@clickmatix.com.au
+ADMIN_EMAIL:sanket@clickmatix.com.au,maulik@clickmatix.com.au,yayawar.tech@gmail.com,itsmeyoursujan@gmail.com

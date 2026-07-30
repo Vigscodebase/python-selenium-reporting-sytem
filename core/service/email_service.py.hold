@@ -1,0 +1,228 @@
+import smtplib
+from email.mime.text import MIMEText
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+
+from utils.logging import *
+from datetime import date, timedelta, datetime
+
+class EmailService():
+
+    @staticmethod
+    def get_date_range(today):
+        """
+        params: today: datetime.date object
+        returns previous month and current month in this format:
+        For example: 
+        Feb'23 - Mar'23
+        Dec'22 - Jan'23
+        """
+        this_month = datetime.strftime(today, "%b'%y")
+        last_month = datetime.strftime(today.replace(day=1) - timedelta(days=1), "%b'%y")
+        return last_month + ' - ' + this_month
+
+    def send_email(self,subject, content, email_to,ccs=[],bcc=[],file_name=None,attachment=None):
+
+        log.debug("Variables for email %s, %s, %s,%s,%s,%s" % (subject,content,email_to,ccs,file_name,attachment))
+        #GET SMTP Details
+
+        sender_name = SENDER_NAME
+        server = SERVER
+        port = PORT
+        username = USERNAME
+        password = PASSWORD
+
+        status = False
+
+        try:
+            # Reference: https://wpmailsmtp.com/gmail-less-secure-apps/#Option_2_Use_an_App_Password
+            if attachment and file_name:
+                file_name = ''.join(file_name.split())
+                message = MIMEMultipart()
+                # Turn these into plain/html MIMEText objects
+                part1 = MIMEText(content, "html")
+
+                # Add body to email
+                message.attach(part1)
+
+                with open(attachment, "rb") as attachment:
+                    # Add file as application/octet-stream
+                    # Email client can usually download this automatically as attachment
+                    part = MIMEBase("application", "octet-stream")
+                    part.set_payload(attachment.read())
+                
+                # Encode file in ASCII characters to send by email    
+                encoders.encode_base64(part)
+
+                # Add header as key/value pair to attachment part
+                log.info("FileName %s" % file_name)
+                part.add_header(
+                    "Content-Disposition",
+                    f"attachment; filename= {file_name}"
+                )
+
+                # Add attachment to message and convert message to string
+                message.attach(part)
+            else:
+                message = MIMEText(content,"html")
+
+            message['From'] = sender_name
+            message['To'] = ",".join(email_to)
+            message['Subject'] = subject
+            message['CC'] = ",".join(ccs)
+            message['CCC'] = ",".join(bcc)
+
+            log.debug("Message to be sent: %s" % message)
+
+            session = smtplib.SMTP(server,port)
+            session.starttls()
+            session.login(username,password)
+            
+            email_to_all = email_to + ccs + bcc
+            text = message.as_string()
+            session.sendmail(username,email_to_all,text)
+            session.quit()
+            log.info("Email succesfully sent to %s" % email_to)
+            status = True
+        except Exception as e:
+            log.error("Email could not be sent to %s" % email_to)
+            log.error(e)
+
+        return status
+    
+    def create_client_email_content(self,domain,client_name,url,report_day,report_type):
+        today = date.today()
+        year = int(today.year)
+        month = int(today.month)
+        day = int(today.day)
+        
+        # report_date = "%s-%s-%s" % ('{:02d}'.format(day),'{:02d}'.format(month),year)
+        date_range = self.get_date_range(today)
+        subject = "Monthly Campaign Progress Report for %s for %s" % (domain, date_range)
+
+        if report_type == 'SEO':
+            email_content = ''' 
+                <p>Hello %s,</p>
+                <p>Hope you are doing well.</p>
+                <p>Here we are sharing the Campaign Performance report for the last (30 days) to give you an understanding of %s current performance.</p>
+
+                <p>The report will help you to understand the following performance:</p>
+                <ul>
+                    <li>Organic users</li>
+                    <li>Organic leads</li>
+                    <li>Website performance in SERPs</li>
+                    <li>Keywords ranking data</li>
+                    <li>Google business profile performance</li>
+                </ul>
+
+                <p>Please check the report to review the campaign performance in the following link: <a href="%s">Get Report Here</a></p>
+                <p>Kindly confirm receipt of these reports. I am available to discuss this monthly 
+                report next week if you have any doubts or queries.</p>
+
+                <p>Thanks</p>
+            ''' % (client_name,domain,url)
+        elif report_type == 'PPC':
+            email_content = ''' 
+                <p>Hello %s,</p>
+                <p>Hope you are doing well.</p>
+                <p>Please find below your Campaign Performance report for the last (30 days), to give you an understanding of %s current performance.</p>
+
+                <p>The PPC report will help you to understand the following performance:</p>
+                <ul>
+                    <li>Reach and Impressions</li>
+                    <li>Click Through Rate (Creative performance)</li>
+                    <li>Conversion Data Overview</li>
+                    <li>Traffic Data Overview</li>
+                    <li>Demographic Overview</li>
+                </ul>
+
+                <p>Please check the report to review the campaign performance in the following link: <a href="%s">Get Report Here</a></p>
+                <p>Kindly confirm receipt of these reports. I am available to discuss this monthly 
+                report next week if you have any doubts or queries.</p>
+
+                <p>Thanks</p>
+            ''' % (client_name,domain,url)
+
+        return subject,email_content
+    
+    
+    def create_admin_email_content(self,overall):
+
+        today = date.today()
+        year = int(today.year)
+        month = int(today.month)
+        day = int(today.day)
+
+        report_date = "%s-%s-%s" % ('{:02d}'.format(day),'{:02d}'.format(month),year)
+
+        subject = "Clickmatix Report Delivery Summary for %s" % report_date
+
+        table = self.__generate_table(overall)
+
+        email_content = ''' 
+            <p>Hello Admin,</p>
+            <p>Hope you are doing well.</p>
+            <p>Here we are sharing the Campaign Performance report for the last (30 days) to give you an understanding of current performance.</p>
+
+            <p>The report will help you to understand the following performance:</p>
+            %s
+
+            <p>Please check the report to review the campaign performance in the following link</p>
+            <p>Kindly confirm receipt of these reports. I am available to discuss this monthly 
+            report next week if you have any doubts or queries.</p>
+
+            <p>Thanks</p>
+            ''' % table
+        
+        return subject,email_content
+
+    def __generate_table(self,overall):
+        table_st = '''<table border="1">
+                        <thead>
+                            <tr>
+                                <td>Domain Name</td>
+                                <td>Process Status</td>
+                                <td>Message</td>
+                                <td>URL</td>
+                            </tr>
+                        </thead>
+                        <tbody>'''
+
+        body = ""
+
+        for record in overall:
+            tr_start = "<tr>"
+            td_st = "<td>"
+            td_end = "</td>"
+            tr_end = "</tr>"
+
+            client_info =  overall[record]
+            r_status = client_info["status"]
+            message = client_info["message"]
+
+            if r_status:
+                status = "<p style='color:green'>Sent</p>"
+            else:
+                status = "<p style='color:red'>Failed</p>"
+            body =  body + tr_start + td_st + record + td_end
+            body =  body + td_st + str(status) + td_end
+            body =  body + td_st + message + td_end
+
+            if "url" in client_info.keys():
+                url = client_info["url"]
+                body =  body + td_st + url + td_end + tr_end
+            else:
+                body = body + tr_end
+        
+        table_end = '''</tbody></table>'''
+
+        table = table_st + body + table_end
+        return table
+    
+
+
+
+
+
+

@@ -1,0 +1,87 @@
+# ---------------------------------------------------
+# Python Standard
+# ---------------------------------------------------
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ---------------------------------------------------
+# Environments
+# ---------------------------------------------------
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ---------------------------------------------------
+# Selenium Specific
+# ---------------------------------------------------
+# Local WebDrivers (if manually downloaded instead of using webdriver-manager)
+chromedriver
+chromedriver.exe
+geckodriver
+geckodriver.exe
+msedgedriver
+msedgedriver.exe
+IEDriverServer.exe
+
+# Selenium generated logs
+ghostdriver.log
+chromedriver.log
+geckodriver.log
+*.log
+
+# Screenshots and downloaded files (adjust folder names if yours differ)
+screenshots/
+downloads/
+*.png
+*.jpeg
+*.jpg
+
+# Browser profiles and local user data (if persisting sessions)
+chrome_profile/
+firefox_profile/
+User Data/
+Default/
+
+# ---------------------------------------------------
+# Testing and Coverage (e.g., PyTest)
+# ---------------------------------------------------
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+nosetests.xml
+coverage.xml
+
+# ---------------------------------------------------
+# IDEs and Editors
+# ---------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo

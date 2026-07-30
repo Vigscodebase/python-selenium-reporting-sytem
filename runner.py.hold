@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+
+
+from utils.logging import *
+
+from core.service.s3_service import S3Service
+from core.service.dsr_service import DSRService
+from core.scraper.download_report import ReportDownloader
+from core.service.email_service import EmailService
+
+import time
+from datetime import date
+import sys,os
+
+import multiprocessing
+from multiprocessing import Process
+
+import schedule
+import time
+
+class Runner():
+
+    def __init__(self):
+        # Initialize services
+        self.dsr_service = DSRService()
+        self.downloader = ReportDownloader()
+        self.email_service = EmailService()
+
+    @staticmethod
+    def sanitize_filename(filepath, domain, report_day, report_type):
+        all_files = os.listdir(filepath)
+        index = 0
+        today = date.today()
+        year = int(today.year)
+        month = int(today.month)
+        for file in all_files:
+            index += 1
+            old_name = file
+            domain = domain if domain else '_'
+            report_date = "%s-%s-%s" % ('{:02d}'.format(int(report_day)),'{:02d}'.format(month),year) if report_day else '_'
+            report_type = report_type if report_type else '_'
+            index_val = '_' + str(index) if index > 1 else ''
+            new_name = str(domain) + '_' + str(report_date) + '_' + str(report_type) + index_val + '.pdf'
+            try:
+                old = os.path.join(filepath, old_name)
+                new = os.path.join(filepath, new_name)
+                if old != new:
+                    os.rename(old, new)
+            except:
+                pass
+
+
+    def read_csv_file(self):
+        # Step 1: Read CSV from the S3 Bucket location
+        s3service = S3Service()
+        records = s3service.read_s3_csv_file()
+        return records
+
+    def get_record_from_domain(self,domain,report_type):
+        # Get record from domain from CSV file
+        s3service = S3Service()
+        records = s3service.read_s3_csv_file()
+        for record in records:
+            if (record["domain"]==domain) and (record["report_type"]==report_type):
+                #print(record)
+                return record
+
+    def process_record(self,record,response):
+
+        s3service = S3Service()
+        dsr_service = DSRService()
+        downloader = ReportDownloader()
+        email_service = EmailService()
+
+        # Step 2: Store variables
+        g_url = record.get("url")
+        client_name = record.get('client_name')
+        client_email = record.get('client_email')
+        client_emails = client_email.split(",")
+        domain = record.get('domain')
+        report_day = record.get('report_day')
+        am_email = record.get('am_email')
+        report_type = record.get('report_type')
+        ccs = []
+        ccs.append(am_email)
+        bcc = BCC.split(",")
+
+        client_info = {}
+
+        # Step 3: Check for Eligibility
+        log.info("Record: %s" % record)
+        status = dsr_service.check_eligibility(report_day)
+        #print(domain,report_type,status)
+        #return
+        if status:
+            # Step 4: Download Report
+            max_tries=3
+            download_status = False
+            for i in range(max_tries):
+                downloader.download_report(g_url,domain,report_day,report_type)
+                folder_path = LOCAL_PATH + domain + "/"+report_day+"/" + report_type + "/"
+                log.info("Checking for File in: %s " % (folder_path))
+                is_folder_exist = os.path.exists(folder_path)
+                if is_folder_exist:
+                    self.sanitize_filename(folder_path, domain, report_day, report_type)
+                    download_status = True
+                    time.sleep(2)
+                    break
+                else:
+                    log.info("Download failed.. Retrying Again")
+                    continue
+
+
+            if download_status:
+                # Step 5: Prepare and upload Report
+                upload_status,url,file_name = s3service.upload_file_s3(domain,report_day,report_type)
+                if not upload_status:
+                    log.error("Processing failed for URL: %s" % g_url)
+                    client_info["status"] = False
+                    client_info["message"] = "Processing Failed for URL."
+                else:
+                    # Step 6: Email to Each Client
+                    # Get Attachment
+
+                    attachment = LOCAL_PATH + domain + "/" + report_day + "/" + report_type + "/" + file_name
+                    log.info("Variables for attachment: %s" % attachment)
+                    # Get content
+                    subject,content = email_service.create_client_email_content(domain,client_name,url,report_day,report_type)
+                    status = email_service.send_email(subject,content,client_emails,ccs,bcc,file_name,attachment)
+                    s3service.remove_files()
+                    client_info["status"] = True
+                    client_info["message"] = "Processing Succesfull for URL."
+                    client_info["url"] = url
+                    if not status:
+                        client_info["status"] = False
+                        client_info["message"] = "An error occurred while sending an email "
+            else:
+                client_info["status"] = False
+                client_info["message"] = "An error occurred while downloading for domain: %s" % domain
+        else:
+            client_info["status"] = False
+            client_info["message"] = "Eligibility criteria was not met for domain: %s" % domain
+            log.info("Eligibility criteria was not met for domain: %s" % domain)
+        response[record["domain"] + "_" + record["report_type"]] = client_info
+        return response
+
+    def send_summary_email(self,records,response):
+        results = []
+        for resp in response:
+            client_info =  response[resp]
+            results.append(client_info["status"])
+
+        # Step 7: Email Summary to Admin
+        if records:
+            subject,content = self.email_service.create_admin_email_content(response)
+            admin_emails = ADMIN_EMAIL.split(",")
+            status = self.email_service.send_email(subject,content,admin_emails)
+            log.info("Summary email sent succesfully %s" % status)
+        else:
+            log.info("Summary email not sent.")
+
+if __name__ == '__main__':
+    log.info("running runner...")
+
+    def runner_schedule():
+        runner = Runner()
+        response = {}
+        records = runner.read_csv_file()
+        for record in records:
+            response = runner.process_record(record,response)
+
+        resp = response.copy()
+        runner.send_summary_email(records,resp)
+
+    arg_length = len(sys.argv)
+    if arg_length == 3:
+        runner = Runner()
+        domain = sys.argv[1]
+        report_type = sys.argv[2]
+        record = runner.get_record_from_domain(domain,report_type)
+        client_info = runner.process_record(record,{})
+        log.info("Processing completed for domain: %s" % domain)
+    else:
+        
+        #schedule.every(0.2).minutes.do(runner_schedule)
+        #schedule.every().day.at("00:01").do(runner_schedule) #Runs at 00:01 UTC, i.e. 11:01AM AEDT
+        while True:
+            # Checks whether a scheduled task
+            # is pending to run or not
+            schedule.run_pending()
+            time.sleep(1)
+
+
+
