@@ -176,16 +176,58 @@ class ReportDownloader:
             self.driver.execute_script(f"window.scrollTo(0, {current});")
             time.sleep(pause)
             current -= viewport
+            
+    def check_for_quota_errors(self):
+        """Scans the rendered DOM for Looker Studio/GA4 API quota exhaustion messages."""
+        # 2026 Exhaustive List of Looker Studio Data & Quota Errors
+        error_keywords = [
+            # Standard Quota Errors
+            "quota error",
+            "quota Error",
+            "quota exceeded",
+            "too many tokens used",
+            "this data set has been accessed too many times",
+            
+            # API Request Rate Limits
+            "exhausted concurrent request",
+            "please send fewer requests concurrently",
+            "too many requests",
+            "too many potentially thresholded requests",
+            
+            # Data Fetch & Configuration Failures caused by timeouts
+            "data set configuration error",
+            "cannot connect to your dataset",
+            "cannot connect to your data set",
+            "failed to fetch the data",
+            "sorry, looker studio ran into an error",
+            "denied access to google analytics",
+            
+            # Row Limits & Date Errors
+            "too many rows returned",
+            "date range is not supported"
+        ]
+        
+        try:
+            # Check the body for standard Looker Studio error texts
+            page_text = self.driver.find_element(By.TAG_NAME, "body").text.lower()
+            for keyword in error_keywords:
+                if keyword in page_text:
+                    log.warning(f"🚨 API Quota/Data Hit! Detected keyword: '{keyword}'")
+                    return True
+            return False
+        except Exception:
+            return False
 
-    def wait_for_page_charts_to_load(self, max_wait=45):
-        """Scrolls page to trigger lazy load and waits for Looker Studio skeletons to clear."""
-        # 1. Scroll down to trigger off-screen charts
+    def wait_for_page_charts_to_load_and_check_quota(self, max_wait=90):
+        """
+        Scrolls page to trigger lazy load, waits for Looker Studio skeletons to clear, 
+        and actively watches for Quota Errors to prevent hanging.
+        Returns:
+            bool: True if page loaded successfully, False if a Quota Error was detected.
+        """
         self.slow_scroll_page(pause=0.5)
         
-        # 2. Dynamically wait for Looker Studio's specific grey skeleton placeholders to disappear
         start_time = time.time()
-        
-        # Advanced XPath: Catches Looker Studio's specific skeleton, placeholder, and busy states
         skeleton_xpath = (
             "//*["
             "contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'loading') or "
@@ -197,46 +239,37 @@ class ReportDownloader:
         )
         
         while time.time() - start_time < max_wait:
+            # 1. Immediate Check: If a quota error spawns, the page is broken. Abort waiting immediately.
+            if self.check_for_quota_errors():
+                return False
+                
+            # 2. Check for remaining skeletons that are actively visible
             try:
                 loaders = self.driver.find_elements(By.XPATH, skeleton_xpath)
-                
-                # Filter to only count skeletons that are actually physically visible on the screen
                 visible_loaders = [s for s in loaders if s.is_displayed()]
                 
                 if not visible_loaders:
                     log.info("Charts and skeletons fully rendered on current page.")
-                    break
+                    time.sleep(5) # Buffer to allow final visualization to paint
+                    
+                    # Do one final quota check just in case the final state was an error
+                    if self.check_for_quota_errors():
+                        return False
+                    return True
                 else:
                     log.info(f"Waiting on {len(visible_loaders)} skeleton(s) to finish rendering...")
             except Exception:
-                break
+                pass
+                
             time.sleep(2)
+            
+        log.warning(f"Timeout of {max_wait}s reached waiting for skeletons. Proceeding anyway...")
         
-        # Buffer to allow the final SVG/Canvas to visually paint after the skeleton disappears
-        time.sleep(5)
-        
-    def check_for_quota_errors(self):
-        """Scans the rendered DOM for Looker Studio/GA4 API quota exhaustion messages."""
-        error_keywords = [
-            "Exhausted concurrent request",
-            "Quota exceeded",
-            "Too many tokens used",
-            "too many requests in the last hour",
-            "issued too many requests",
-            "Data Set Configuration Error",
-            "Quota Error",
-            "Quota error",
-        ]
-        
-        try:
-            page_text = self.driver.find_element(By.TAG_NAME, "body").text
-            for keyword in error_keywords:
-                if keyword.lower() in page_text.lower():
-                    log.warning(f"🚨 API Quota Hit! Detected keyword: '{keyword}'")
-                    return True
+        # If we hit the 90-second timeout because an API request hung permanently, verify no errors exist.
+        if self.check_for_quota_errors():
             return False
-        except Exception:
-            return False
+            
+        return True
             
     def go_to_next_page(self, timeout=20):
         next_btn = WebDriverWait(self.driver, timeout).until(
@@ -283,7 +316,7 @@ class ReportDownloader:
             total_pages = self.get_total_pages()
             log.info(f"Total pages detected: {total_pages}")
             
-            # Forward Navigation with Quota Checking
+            # Forward Navigation with Real-time Quota Checking
             quota_retries = 0
             MAX_QUOTA_RETRIES = 3
             page = 1
@@ -292,10 +325,10 @@ class ReportDownloader:
                 wait_for_internet()
                 log.info(f"Rendering page {page}/{total_pages}")
                 
-                self.wait_for_page_charts_to_load()
+                # Check for API Quota Rate Limits continuously while loading
+                page_success = self.wait_for_page_charts_to_load_and_check_quota()
                 
-                # Check for API Quota Rate Limits
-                if self.check_for_quota_errors():
+                if not page_success:
                     if quota_retries >= MAX_QUOTA_RETRIES:
                         raise Exception("Max GA4 quota retries reached. Moving to next report to prevent hanging.")
                         
