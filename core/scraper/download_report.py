@@ -29,9 +29,9 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("utils")
 
 # AWS S3 Configuration
-BUCKET_NAME = 'clickmatix-report'
-INPUT_FILE_PATH = 'Input/test_input_gds.csv'
-REGION = 'us-east-1'
+BUCKET_NAME = 'placeholder'
+INPUT_FILE_PATH = 'placeholder'
+REGION = 'placeholder'
 DOWNLOAD_TIMEOUT = 720
 
 
