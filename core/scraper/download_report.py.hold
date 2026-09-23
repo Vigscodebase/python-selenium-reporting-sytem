@@ -104,7 +104,7 @@ class ReportDownloader():
 
 if __name__ == '__main__':
     rd = ReportDownloader()
-    url = "https://lookerstudio.google.com/reporting/fe1451bf-ad2a-41de-bbca-34272eb68561"
+    url = "placeholder"
     domain = "abc.com"
     report_day = "6"
     report_type = "SEO"
