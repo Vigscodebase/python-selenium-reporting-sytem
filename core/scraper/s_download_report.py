@@ -140,9 +140,9 @@ class ReportDownloader():
 
 if __name__ == '__main__':
     rd = ReportDownloader()
-    url = "https://lookerstudio.google.com/reporting/5f04200f-750e-49ad-aaa0-5efa2da426f1/page/p_98rwjjkqzc"  # Example URL
-    domain = "Bunker.net.au"
-    report_day = "3"
-    report_type = "PPC"
-    LOCAL_PATH = "/root/data/"
+    url = "placeholder"  # Example URL
+    domain = "placeholder"
+    report_day = "placeholder"
+    report_type = "placeholder"
+    LOCAL_PATH = "placeholder"
     rd.download_report(url, domain, report_day, report_type)
