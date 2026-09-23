@@ -90,12 +90,12 @@ class ReportDownloader():
 
 if __name__ == '__main__':
     rd = ReportDownloader()
-    #url = "https://lookerstudio.google.com/u/0/reporting/ffff5e7a-8642-47d0-96fc-8d0156747e58/page/p_opq98waa2c"
-    url = "https://lookerstudio.google.com/u/1/reporting/8844750d-2d8f-4a00-972b-b691f2c0709b/page/p_4z3day7k2c"
-    domain = "manjul.com"
-    report_day = "2"
-    report_type = "SEO"
-    LOCAL_PATH = "/root/data/"
+    #url = "placeholder"
+    url = "placeholder"
+    domain = "placeholder"
+    report_day = "placeholder"
+    report_type = "placeholder"
+    LOCAL_PATH = "placeholder"
     rd.download_report(url,domain,report_day,report_type)
 
 
