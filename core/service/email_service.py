@@ -10,12 +10,12 @@ from botocore.exceptions import NoCredentialsError
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("utils")
 
-SENDER_NAME = "Clickmatix Report"
-SERVER = "smtp.gmail.com"
-PORT = "587"
-SERVER = "smtp.gmail.com"
-USERNAME = "reports@clickmatix.com.au"
-PASSWORD = "fzpmxlcqzophyjki"
+SENDER_NAME = "placeholder"
+SERVER = "placeholder"
+PORT = "placeholder"
+SERVER = "placeholder"
+USERNAME = "placeholder"
+PASSWORD = "placeholder"
 
 class EmailService:
 
